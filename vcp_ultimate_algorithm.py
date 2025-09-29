@@ -57,7 +57,8 @@ class VCPDetector:
                  max_contractions: int = 6,
                  max_base_depth: float = 0.35,
                  final_contraction_max: float = 0.10,
-                 breakout_volume_multiplier: float = 1.5):
+                 breakout_volume_multiplier: float = 1.5,
+                 check_trend_template: bool = True):
         """
         Initialize VCP Detector with configurable parameters
         
@@ -77,6 +78,7 @@ class VCPDetector:
         self.max_base_depth = max_base_depth
         self.final_contraction_max = final_contraction_max
         self.breakout_volume_multiplier = breakout_volume_multiplier
+        self.check_trend_template = check_trend_template
     
     def detect_vcp(self, df: pd.DataFrame, symbol: str) -> VCPSignal:
         """
@@ -97,9 +99,10 @@ class VCPDetector:
             if not self._validate_data(df, signal):
                 return signal
             
-            # Apply Minervini Trend Template filter
-            if not self._check_trend_template(df, signal):
-                return signal
+            # Apply Minervini Trend Template filter (can be bypassed)
+            if self.check_trend_template:
+                if not self._check_trend_template(df, signal):
+                    return signal
             
             # Find swing points (highs and lows)
             swing_highs, swing_lows = self._find_swing_points(df)

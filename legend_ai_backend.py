@@ -133,6 +133,27 @@ class Portfolio(Base):
     target_price = Column(Float)
     status = Column(String(20), default="open")
 
+# Scan tracking models
+class ScanRun(Base):
+    __tablename__ = "scan_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    total_tickers = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    notes = Column(String(500), default="")
+
+class ScanFailure(Base):
+    __tablename__ = "scan_failures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, index=True)
+    symbol = Column(String(10), index=True)
+    error_message = Column(String(500))
+    occurred_at = Column(DateTime, default=datetime.utcnow)
+
 # Auto-create tables
 Base.metadata.create_all(bind=engine)
 
@@ -255,30 +276,67 @@ class PatternDetector:
 
 # API Endpoints
 
+def _patterns_from_db(db: Session) -> List[PatternResponse]:
+    patterns = db.query(Pattern).filter(Pattern.status == "active").all()
+    if not patterns:
+        return []
+    # Fetch stocks in one go
+    symbols = list({p.symbol for p in patterns})
+    stocks = db.query(Stock).filter(Stock.symbol.in_(symbols)).all()
+    stock_map = {s.symbol: s for s in stocks}
+
+    results: List[PatternResponse] = []
+    for p in patterns:
+        s = stock_map.get(p.symbol)
+        if not s:
+            # Build minimal response if stock metadata missing
+            results.append(PatternResponse(
+                symbol=p.symbol,
+                name=p.symbol,
+                sector="Unknown",
+                pattern_type=p.pattern_type or "VCP",
+                confidence=float(p.confidence or 0.0),
+                pivot_price=float(p.pivot_price or 0.0),
+                stop_loss=float(p.stop_loss or 0.0),
+                current_price=float(0.0),
+                days_in_pattern=int(p.days_in_pattern or 0),
+                rs_rating=0,
+            ))
+            continue
+
+        results.append(PatternResponse(
+            symbol=p.symbol,
+            name=s.name or p.symbol,
+            sector=s.sector or "Unknown",
+            pattern_type=p.pattern_type or "VCP",
+            confidence=float(p.confidence or 0.0),
+            pivot_price=float(p.pivot_price or (s.current_price or 0.0)),
+            stop_loss=float(p.stop_loss or ((s.current_price or 0.0) * 0.92)),
+            current_price=float(s.current_price or 0.0),
+            days_in_pattern=int(p.days_in_pattern or 0),
+            rs_rating=int(s.rs_rating or 0),
+        ))
+    return results
+
 @app.get("/api/patterns/all", response_model=List[PatternResponse])
 async def get_all_patterns(db: Session = Depends(get_db)):
-    '''Return VCP detections using the advanced algorithm.'''
-
-    cached_patterns = redis_client.get("patterns:all") if redis_client else None
-    if cached_patterns:
-        if isinstance(cached_patterns, bytes):
-            cached_patterns = cached_patterns.decode("utf-8")
-        cached_list = json.loads(cached_patterns)
+    '''Return latest cached VCP detections from the database.'''
+    cached = redis_client.get("patterns:all") if redis_client else None
+    if cached:
+        if isinstance(cached, bytes):
+            cached = cached.decode("utf-8")
+        cached_list = json.loads(cached)
         return [PatternResponse(**item) for item in cached_list]
 
-    stocks = db.query(Stock).all()
-    pattern_responses = detect_vcp_patterns_from_stocks(stocks)
-
+    pattern_responses = _patterns_from_db(db)
     if redis_client:
-        redis_client.setex("patterns:all", 300, json.dumps([pattern.dict() for pattern in pattern_responses]))
-
+        redis_client.setex("patterns:all", 300, json.dumps([p.dict() for p in pattern_responses]))
     return pattern_responses
 
 @app.get("/api/patterns/vcp", response_model=List[PatternResponse])
 async def get_vcp_patterns(db: Session = Depends(get_db)):
-    '''Run the advanced VCP detector across available stocks'''
-    stocks = db.query(Stock).all()
-    return detect_vcp_patterns_from_stocks(stocks)
+    '''Return latest cached VCP detections from the database.'''
+    return _patterns_from_db(db)
 
 @app.get("/api/market/environment", response_model=MarketEnvironment)
 async def get_market_environment():
@@ -526,6 +584,42 @@ def detect_vcp_patterns_from_stocks(stocks: List[Stock]) -> List[PatternResponse
         pattern_responses.append(convert_vcp_signal_to_pattern_response(signal, stock))
 
     return pattern_responses
+
+# New scan endpoints
+
+@app.get("/api/scans/latest")
+async def get_latest_scan(db: Session = Depends(get_db)):
+    run = db.query(ScanRun).order_by(ScanRun.started_at.desc()).first()
+    if not run:
+        return {
+            "last_scan_started_at": None,
+            "last_scan_finished_at": None,
+            "total_tickers": 0,
+            "success_count": 0,
+            "failed_count": 0,
+        }
+    return {
+        "last_scan_started_at": run.started_at.isoformat() if run.started_at else None,
+        "last_scan_finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "total_tickers": run.total_tickers or 0,
+        "success_count": run.success_count or 0,
+        "failed_count": run.failed_count or 0,
+    }
+
+@app.get("/api/scans/results", response_model=List[PatternResponse])
+async def get_scan_results(db: Session = Depends(get_db)):
+    patterns = _patterns_from_db(db)
+    # Sort by confidence desc
+    return sorted(patterns, key=lambda p: p.confidence, reverse=True)
+
+@app.get("/api/scans/stats")
+async def get_scan_stats(db: Session = Depends(get_db)):
+    patterns = _patterns_from_db(db)
+    total = len(patterns)
+    by_sector = {}
+    for p in patterns:
+        by_sector[p.sector] = by_sector.get(p.sector, 0) + 1
+    return {"total": total, "by_sector": by_sector}
 
 # Background Tasks
 async def pattern_detection_task():
