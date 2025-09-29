@@ -1,0 +1,26 @@
+name: release-tag
+on:
+  push:
+    branches: [ main ]
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute next tag
+        id: ver
+        run: |
+          # Read existing tags, compute v0.x increment (minimal for now)
+          last=$(git tag --list 'v0.*' --sort=-v:refname | head -n1)
+          if [ -z "$last" ]; then echo "tag=v0.1.0" >> $GITHUB_OUTPUT; exit 0; fi
+          minor=$(echo "$last" | sed 's/^v0\.\([0-9]\+\)\.[0-9]\+$/\1/')
+          next_minor=$((minor+1))
+          echo "tag=v0.${next_minor}.0" >> $GITHUB_OUTPUT
+      - name: Create tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git tag ${{ steps.ver.outputs.tag }}
+          git push origin ${{ steps.ver.outputs.tag }}
+
+

@@ -19,5 +19,12 @@ jobs:
         env:
           SERVICE_BASE: ${{ github.event.inputs.service_base || 'https://legend-api.onrender.com' }}
         run: python scripts/monitor_service.py
+      - name: Slack alert on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then echo "No slack webhook configured"; exit 0; fi
+          curl -X POST -H 'Content-type: application/json' --data "$(jq -n --arg t "Legend API monitor failed on $GITHUB_REPOSITORY@$GITHUB_SHA" '{text:$t}')" "$SLACK_WEBHOOK_URL"
 
 
