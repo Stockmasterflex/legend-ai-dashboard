@@ -130,3 +130,14 @@ try:
 except Exception:
     pass
 
+# Warn if DATABASE_URL missing (non-fatal for /healthz)
+try:
+    from .config import get_database_url  # lazy import
+
+    try:
+        _ = get_database_url()
+    except Exception as db_exc:  # pragma: no cover
+        logging.error("database url missing or invalid", extra={"error": str(db_exc)})
+except Exception:
+    pass
+
