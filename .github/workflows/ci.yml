@@ -13,5 +13,7 @@ jobs:
       - run: black --check .
       - run: mypy app || true
       - run: pytest -q || true
+      - run: python scripts/doctor_dockerfile.py
+      - run: python scripts/doctor_render_blueprint.py
 
 
