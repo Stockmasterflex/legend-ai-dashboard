@@ -28,6 +28,6 @@ ENV REDIS_URL=""
 EXPOSE 8000
 
 # Use Render's PORT env var and the correct FastAPI entrypoint
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn legend_ai_backend:app --host 0.0.0.0 --port ${PORT}"]
 
 
