@@ -1,0 +1,18 @@
+version: 1
+rules:
+  - match: "**/*.py"
+    instructions: |
+      - Add type hints and docstrings.
+      - No bare except; raise specific exceptions.
+      - Split any function > 50 lines.
+      - Prefer pure functions for detectors; side effects only in services.
+  - match: "app/detectors/**/*.py"
+    instructions: |
+      Implement per docs/specs/patterns/*.md. Return Pydantic models.
+      Provide edge-case handling and unit tests in tests/detectors/.
+  - match: "tests/**/*.py"
+    instructions: |
+      Use pytest; include adversarial fixtures (noise, gaps, thin volume).
+      Add at least one false-positive guard per pattern.
+
+

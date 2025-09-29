@@ -27,4 +27,5 @@ ENV DATABASE_URL="sqlite:////app/data/legendai.db" \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "legend_ai_backend:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use shell form so $PORT expands on Render
+CMD sh -c 'uvicorn app.legend_ai_backend:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"'
