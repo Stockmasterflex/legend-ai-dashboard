@@ -13,10 +13,13 @@ import os
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, APIRouter, Query, Response, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 from .config import allowed_origins, mock_enabled
+from .flags import get_flags
+from .cache import cache_get, cache_set
+from .db_queries import fetch_patterns, get_status
 
 from .observability import setup_json_logging, setup_sentry
 
@@ -93,16 +96,68 @@ except Exception:
 v1 = APIRouter(prefix="/v1", tags=["v1"])
 
 
-@v1.get("/patterns/all")
+class PatternItem(BaseModel):
+    ticker: str
+    pattern: str
+    as_of: str
+    confidence: float | None = Field(default=None)
+    rs: float | None = Field(default=None)
+    price: float | None = Field(default=None)
+    meta: dict | None = Field(default=None)
+
+
+class PaginatedPatterns(BaseModel):
+    items: list[PatternItem]
+    next: str | None
+
+
+@v1.get("/patterns/all", response_model=PaginatedPatterns)
 def patterns_all_v1(
     response: Response,
     limit: int = Query(100, ge=1, le=500),
     cursor: str | None = None,
 ):
-    # Set short cache to reduce thrash
+    """Return latest patterns with cursor pagination.
+
+    Ordered by (as_of DESC, ticker ASC). Cursor encodes last (as_of, ticker).
+    """
     response.headers["Cache-Control"] = "public, max-age=30"
-    # Placeholder passthrough to avoid breaking: adapt to real service later
-    return {"items": [], "next": None}
+
+    flags = get_flags()
+    cache_key = f"v1:patterns:all:{limit}:{cursor or ''}"
+    if "cache" in flags:
+        cached = cache_get(cache_key)
+        if cached:
+            return cached
+
+    try:
+        from .db import engine  # type: ignore
+        items, next_cursor = fetch_patterns(engine, limit=limit, cursor=cursor)
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail={"code": "db_error", "message": str(exc)})
+
+    payload = {"items": items, "next": next_cursor}
+    if "cache" in flags:
+        cache_set(cache_key, payload, ttl=60)
+    return payload
+
+
+class StatusModel(BaseModel):
+    last_scan_time: str | None
+    rows_total: int
+    patterns_daily_span_days: int | None
+    version: str
+
+
+@v1.get("/meta/status", response_model=StatusModel)
+def meta_status_v1() -> StatusModel:
+    try:
+        from .db import engine  # type: ignore
+        status = get_status(engine)
+    except Exception:
+        # graceful when DB unavailable
+        status = {"last_scan_time": None, "rows_total": 0, "patterns_daily_span_days": None, "version": "0.1.0"}
+    return StatusModel(**status)
 
 
 app.include_router(v1)

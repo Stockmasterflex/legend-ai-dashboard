@@ -5,8 +5,8 @@ Idempotent by (ticker, pattern, as_of).
 
 import os
 import sqlalchemy as sa
-from sqlalchemy import text
 from typing import List, Dict
+from .utils import upsert_patterns, load_universe
 
 
 PG_URL = os.getenv("DATABASE_URL")
@@ -17,8 +17,7 @@ engine = sa.create_engine(PG_URL, future=True, pool_pre_ping=True)
 
 
 def universe() -> List[str]:
-    # TODO: read from watchlist table/file; seed if needed
-    return ["AAPL", "MSFT", "NVDA", "AMZN", "TSLA"]
+    return load_universe()
 
 
 def run_one(ticker: str) -> List[Dict]:
@@ -27,18 +26,7 @@ def run_one(ticker: str) -> List[Dict]:
 
 
 def upsert(rows: List[Dict]) -> None:
-    if not rows:
-        return
-    cols = list(rows[0].keys())
-    keys = ",".join(cols)
-    placeholders = ",".join([f":{c}" for c in cols])
-    conflict = "(ticker, pattern, as_of)"
-    set_expr = ", ".join([f"{c}=EXCLUDED.{c}" for c in cols if c not in ("ticker", "pattern", "as_of")])
-    sql = text(
-        f"INSERT INTO patterns ({keys}) VALUES ({placeholders}) ON CONFLICT {conflict} DO UPDATE SET {set_expr}"
-    )
-    with engine.begin() as conn:
-        conn.execute(sql, rows)
+    upsert_patterns(engine, rows)
 
 
 def main() -> None:

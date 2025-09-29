@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Legend API Smoke</title>
+  <style>pre{background:#111;color:#ddd;padding:12px;border-radius:8px}</style>
+  <script>
+    async function ping(path){
+      const r = await fetch(path);
+      const t = await r.text();
+      return {status:r.status, body: t};
+    }
+    async function run(){
+      const base = location.origin;
+      const out = document.getElementById('out');
+      const seq = [ '/healthz', '/readyz', '/v1/patterns/all?limit=1' ];
+      for (const p of seq){
+        try {
+          const res = await fetch(base + p);
+          const txt = await res.text();
+          out.innerHTML += `\n# ${p} -> ${res.status}\n${txt}\n`;
+        } catch (e) {
+          out.innerHTML += `\n# ${p} -> error ${e}\n`;
+        }
+      }
+    }
+    window.addEventListener('load', run);
+  </script>
+</head>
+<body>
+  <h1>Legend API Smoke</h1>
+  <pre id="out">started: <script>document.write(new Date().toISOString())</script></pre>
+</body>
+</html>
+
+
