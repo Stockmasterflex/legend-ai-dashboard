@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: legend-api
+    serviceId: srv-d33kus6mcj7s73afodng
+    env: docker
+    region: oregon
+    plan: starter
+    autoDeploy: true
+    dockerfilePath: Dockerfile
+    healthCheckPath: "/healthz"
+    envVars:
+      # Prefer DATABASE_URL; keep legacy only if needed temporarily
+      # - key: SERVICE_DATABASE_URL
+      #   value: ""
+      - key: DATABASE_URL
+        value: ""
+      - key: REDIS_URL
+        value: ""
+      - key: SHOTS_BASE_URL
+        value: "https://legend-shots.onrender.com"
+      - key: ALLOWED_ORIGINS
+        value: "https://legend-ai.vercel.app,https://legend-ai-dashboard.vercel.app"
+      - key: ALLOWED_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+      - key: VCP_PROVIDER
+        value: "yfinance"
+      - key: NEWSAPI_KEY
+        value: ""
+      - key: FINNHUB_API_KEY
+        value: ""
+      - key: RENDER_API_KEY
+        value: ""
+      - key: SLACK_WEBHOOK
+        value: ""
+      - key: SLACK_BOT_TOKEN
+        value: ""
+      - key: SLACK_APP_TOKEN
+        value: ""
+      - key: FOREMAN_SCHEDULE_CHANNEL_ID
+        value: "C097NJ4JJSZ"
+      - key: FOREMAN_BOT_DM_CHANNEL_ID
+        value: "D09G7DZ304R"
+      - key: OPENROUTER_API_KEY
+        value: ""
+
+cronJobs:
+  - name: daily-market-scanner
+    schedule: "0 10 * * *" # 6 AM ET (10:00 UTC)
+    command: "python daily_market_scanner.py"
