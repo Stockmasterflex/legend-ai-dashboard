@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, APIRouter, Query, Response, HTTPException, Request
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
+import logging
+from .config import allowed_origins, mock_enabled
 
 from .observability import setup_json_logging, setup_sentry
 
@@ -33,9 +35,7 @@ app = setup_sentry(base_app)
 
 
 # CORS middleware with env-driven allowlist
-ALLOWED_ORIGINS = [
-    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()
-]
+ALLOWED_ORIGINS = allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
@@ -120,6 +120,13 @@ try:
         # FastAPI integration helper
         secure.framework.fastapi(resp)  # type: ignore[attr-defined]
         return resp
+except Exception:
+    pass
+
+
+# Boot log
+try:
+    logging.info("legend-api boot", extra={"module": "legend-api", "port_env": os.getenv("PORT"), "mock": mock_enabled()})
 except Exception:
     pass
 

@@ -12,6 +12,7 @@ WORKDIR $APP_HOME
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -25,7 +26,11 @@ RUN mkdir -p $APP_HOME/data
 ENV DATABASE_URL="sqlite:////app/data/legendai.db" \
     REDIS_URL=""
 
-EXPOSE 8000
+# Optional EXPOSE; Render routes to $PORT. Remove 8000 to avoid confusion.
+EXPOSE 10000
 
 # Use shell form so $PORT expands on Render
 CMD sh -c 'uvicorn app.legend_ai_backend:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"'
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=5 \
+  CMD /bin/sh -c 'curl -fsS http://localhost:${PORT}/healthz || exit 1'
