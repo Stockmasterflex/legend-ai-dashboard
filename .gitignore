@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv
+legendai.db
+node_modules/
+.DS_Store
+.env.local
+*.log
+*.zip
+render.yaml
+
