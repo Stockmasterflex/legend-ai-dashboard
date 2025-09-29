@@ -709,3 +709,31 @@ if __name__ == "__main__":
 
     # Run the application
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+from fastapi import FastAPI
+try:
+    app
+except NameError:
+    app=FastAPI(title="Legend API")
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True, "version": "0.1.0"}
+
+try:
+    import os
+    from sqlalchemy import create_engine, text
+    _db=os.getenv("DATABASE_URL")
+    _engine=create_engine(_db, pool_pre_ping=True, future=True) if _db else None
+    @app.get("/readyz")
+    def readyz():
+        if not _engine:
+            return {"ok": False, "reason": "db engine unavailable"}
+        with _engine.connect() as c:
+            c.execute(text("SELECT 1"))
+        return {"ok": True}
+except Exception:
+    @app.get("/readyz")
+    def readyz():
+        return {"ok": False, "reason": "db engine unavailable"}
