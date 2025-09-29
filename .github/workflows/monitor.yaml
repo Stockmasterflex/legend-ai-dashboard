@@ -1,0 +1,23 @@
+name: monitor
+on:
+  workflow_dispatch:
+    inputs:
+      service_base:
+        description: "Base URL (default legend-api.onrender.com)"
+        required: false
+  schedule:
+    - cron: '0 * * * *'
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt || true
+      - name: Monitor service
+        env:
+          SERVICE_BASE: ${{ github.event.inputs.service_base || 'https://legend-api.onrender.com' }}
+        run: python scripts/monitor_service.py
+
+
