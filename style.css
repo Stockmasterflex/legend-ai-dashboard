@@ -1073,7 +1073,6 @@ body {
   border: 1px solid var(--legend-border);
   border-radius: var(--radius-base);
   padding: var(--space-12);
-  text-align: center;
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-standard);
 }
@@ -1081,13 +1080,25 @@ body {
 .sector-item:hover {
   border-color: var(--legend-gold);
   background: var(--legend-hover);
+  transform: translateY(-2px);
 }
 
 .sector-name {
   font-size: var(--font-size-xs);
   color: var(--legend-text-primary);
   font-weight: var(--font-weight-medium);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.sector-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sector-count {
+  font-size: var(--font-size-xs);
+  color: var(--legend-text-secondary);
 }
 
 .sector-performance {
@@ -1101,6 +1112,10 @@ body {
 
 .sector-performance.negative {
   color: var(--legend-red);
+}
+
+.sector-performance.neutral {
+  color: var(--legend-gold);
 }
 
 /* Scanner Section */

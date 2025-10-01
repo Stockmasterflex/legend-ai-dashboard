@@ -459,18 +459,107 @@ class LegendAI {
     }
 
     populateSectorGrid() {
-        // Placeholder - implement sector performance
-        console.log('📊 Sector grid placeholder');
+        const sectorGrid = document.getElementById('sector-grid');
+        if (!sectorGrid) {
+            console.warn('⚠️ Sector grid not found');
+            return;
+        }
+        
+        // Calculate sector breakdown from patterns
+        const sectorCounts = {};
+        const totalPatterns = this.data?.patterns?.length || 0;
+        
+        (this.data?.patterns || []).forEach(pattern => {
+            const sector = pattern.sector || 'Unknown';
+            sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
+        });
+        
+        // Sort by count
+        const sortedSectors = Object.entries(sectorCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6); // Top 6 sectors
+        
+        if (sortedSectors.length === 0) {
+            sectorGrid.innerHTML = '<div style="text-align: center; padding: 1rem; color: #888;">No sector data available</div>';
+            return;
+        }
+        
+        sectorGrid.innerHTML = sortedSectors.map(([sector, count]) => {
+            const percentage = ((count / totalPatterns) * 100).toFixed(0);
+            const isPositive = count > 0;
+            
+            return `
+                <div class="sector-item" data-sector="${sector}">
+                    <div class="sector-name">${sector}</div>
+                    <div class="sector-stats">
+                        <span class="sector-count">${count} patterns</span>
+                        <span class="sector-performance ${isPositive ? 'positive' : 'neutral'}">${percentage}%</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handlers
+        document.querySelectorAll('.sector-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const sector = item.dataset.sector;
+                const sectorFilter = document.getElementById('sector-filter');
+                if (sectorFilter) {
+                    sectorFilter.value = sector;
+                    this.applyFilters();
+                }
+            });
+        });
+        
+        console.log('✅ Sector grid populated with', sortedSectors.length, 'sectors');
+    }
+
+    populateHighProbabilitySetups() {
+        // This will populate a sidebar with top patterns
+        // For now, we'll use the existing structure
+        console.log('📊 High-probability setups calculated');
+        
+        // Calculate scores and get top patterns
+        const scoredPatterns = (this.data?.patterns || []).map(p => ({
+            ...p,
+            score: (p.confidence || 0) * ((p.rs_rating || 80) / 100)
+        })).sort((a, b) => b.score - a.score).slice(0, 10);
+        
+        // Store for later use
+        this.topPatterns = scoredPatterns;
+        
+        console.log('Top patterns:', scoredPatterns.map(p => `${p.symbol} (${(p.score * 100).toFixed(0)} pts)`).join(', '));
+    }
+
+    populateScanStatistics() {
+        // Calculate scan statistics
+        const patterns = this.data?.patterns || [];
+        const totalPatterns = patterns.length;
+        const avgConfidence = totalPatterns > 0
+            ? (patterns.reduce((sum, p) => sum + (p.confidence || 0), 0) / totalPatterns * 100).toFixed(0)
+            : 0;
+        
+        const uniqueSectors = new Set(patterns.map(p => p.sector)).size;
+        const topRsStock = patterns.reduce((top, p) => 
+            (p.rs_rating || 0) > (top.rs_rating || 0) ? p : top
+        , patterns[0] || {});
+        
+        console.log('📊 Scan Statistics:', {
+            totalPatterns,
+            avgConfidence: avgConfidence + '%',
+            uniqueSectors,
+            topRsStock: topRsStock.symbol || 'N/A'
+        });
     }
 
     populatePortfolioTable() {
-        // Placeholder - implement portfolio
-        console.log('📊 Portfolio table placeholder');
+        // Replaced with scan statistics
+        this.populateScanStatistics();
     }
 
     populateWatchlist() {
-        // Placeholder - implement watchlist
-        console.log('📊 Watchlist placeholder');
+        // Replaced with high-probability setups
+        this.populateHighProbabilitySetups();
     }
 
     startRealTimeUpdates() {
