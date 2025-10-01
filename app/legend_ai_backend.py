@@ -241,7 +241,7 @@ def seed_demo_data():
                 conn.execute(
                     text("""
                         INSERT INTO patterns (ticker, pattern, as_of, confidence, rs, price, meta)
-                        VALUES (:ticker, :pattern, :as_of, :confidence, :rs, :price, :meta::jsonb)
+                        VALUES (:ticker, :pattern, :as_of, :confidence, :rs, :price, :meta)
                         ON CONFLICT (ticker, pattern, as_of) DO UPDATE
                         SET confidence=EXCLUDED.confidence, rs=EXCLUDED.rs, price=EXCLUDED.price, meta=EXCLUDED.meta
                     """),
