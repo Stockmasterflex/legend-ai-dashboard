@@ -178,20 +178,27 @@ def get_all_patterns_legacy(response: Response, limit: int = Query(default=500, 
         # Transform to dashboard format
         dashboard_format = []
         for item in items:
+            # Handle both dict and RowMapping types
+            ticker = item["ticker"] if isinstance(item, dict) else item.ticker
+            pattern = item["pattern"] if isinstance(item, dict) else item.pattern
+            confidence = item["confidence"] if isinstance(item, dict) else item.confidence
+            price = item["price"] if isinstance(item, dict) else item.price
+            rs = item["rs"] if isinstance(item, dict) else item.rs
+            
             # Convert database format to dashboard expected format
             dashboard_item = {
-                "symbol": item.get("ticker", ""),
-                "name": item.get("ticker", "") + " Corp",  # TODO: fetch real company names
+                "symbol": ticker,
+                "name": ticker + " Corp",  # TODO: fetch real company names
                 "sector": "Technology",  # TODO: fetch real sector data
-                "pattern_type": item.get("pattern", "VCP"),
-                "confidence": item.get("confidence", 0) / 100 if item.get("confidence", 0) > 1 else item.get("confidence", 0),
-                "pivot_price": item.get("price", 0),
-                "stop_loss": item.get("price", 0) * 0.92,  # 8% below current
-                "current_price": item.get("price", 0),
+                "pattern_type": pattern,
+                "confidence": confidence / 100 if confidence and confidence > 1 else (confidence or 0),
+                "pivot_price": price,
+                "stop_loss": price * 0.92,  # 8% below current
+                "current_price": price,
                 "days_in_pattern": 15,  # TODO: calculate from as_of
-                "rs_rating": int(item.get("rs", 80) or 80),
-                "entry": item.get("price", 0),
-                "target": item.get("price", 0) * 1.20,  # 20% target
+                "rs_rating": int(rs or 80),
+                "entry": price,
+                "target": price * 1.20,  # 20% target
                 "action": "Analyze"
             }
             dashboard_format.append(dashboard_item)
