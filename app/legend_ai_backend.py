@@ -242,6 +242,21 @@ def get_portfolio_positions():
     return []
 
 
+# Debug endpoint to list all routes
+@app.get("/admin/list-routes")
+def list_all_routes():
+    """List all registered routes to debug routing issues."""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if route.methods else [],
+                "name": route.name if hasattr(route, "name") else None
+            })
+    return {"total_routes": len(routes), "routes": routes}
+
+
 # Debug endpoint to test data transformation
 @app.get("/admin/test-legacy-transform")
 def test_legacy_transform():
