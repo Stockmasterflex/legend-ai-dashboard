@@ -36,9 +36,8 @@ def fetch_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         df = stock.history(period=period)
         if df.empty:
             return None
-        # Rename columns to match detector expectations
+        # Reset index to make Date a column, keep uppercase for VCP detector
         df = df.reset_index()
-        df.columns = [col.lower() for col in df.columns]
         return df
     except Exception as e:
         logging.error(f"Error fetching {ticker}: {e}")

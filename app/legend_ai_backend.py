@@ -235,7 +235,7 @@ def run_scan_endpoint(limit: int = Query(default=7, ge=1, le=20)):
                     continue
                 
                 df = df.reset_index()
-                df.columns = [col.lower() for col in df.columns]
+                # Keep uppercase column names for VCP detector
                 
                 # Detect
                 signal = detector.detect_vcp(df, ticker)
