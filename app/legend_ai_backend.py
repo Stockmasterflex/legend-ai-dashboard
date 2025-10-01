@@ -197,6 +197,94 @@ def init_database_endpoint():
         raise HTTPException(status_code=500, detail=f"Init failed: {str(e)}")
 
 
+@app.post("/admin/run-scan")
+def run_scan_endpoint(limit: int = Query(default=7, ge=1, le=20)):
+    """Trigger a scan for VCP patterns on a limited set of tickers."""
+    try:
+        import sys
+        from pathlib import Path
+        from datetime import datetime
+        import pandas as pd
+        import yfinance as yf
+        
+        # Add parent to path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        
+        from vcp_ultimate_algorithm import VCPDetector  # type: ignore
+        from .db import engine  # type: ignore
+        from sqlalchemy import text
+        
+        # Load universe
+        universe_path = Path(__file__).parent.parent / "data" / "universe.csv"
+        if universe_path.exists():
+            with open(universe_path) as f:
+                tickers = [line.strip() for line in f if line.strip()][:limit]
+        else:
+            tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN"][:limit]
+        
+        detector = VCPDetector(min_price=10.0, min_volume=500000, min_contractions=2)
+        
+        results = []
+        for ticker in tickers:
+            try:
+                # Fetch data
+                stock = yf.Ticker(ticker)
+                df = stock.history(period="1y")
+                if df.empty or len(df) < 50:
+                    results.append(f"⊘ {ticker}: insufficient data")
+                    continue
+                
+                df = df.reset_index()
+                df.columns = [col.lower() for col in df.columns]
+                
+                # Detect
+                signal = detector.detect_vcp(df, ticker)
+                
+                if signal.detected:
+                    # Upsert to database
+                    record = {
+                        "ticker": ticker,
+                        "pattern": "VCP",
+                        "as_of": datetime.now(),
+                        "confidence": float(signal.confidence_score),
+                        "rs": None,
+                        "price": float(signal.pivot_price) if signal.pivot_price else None,
+                        "meta": text(f"""'{{"contractions": {len(signal.contractions)}}}'::jsonb""")
+                    }
+                    
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("""
+                                INSERT INTO patterns (ticker, pattern, as_of, confidence, rs, price, meta)
+                                VALUES (:ticker, :pattern, :as_of, :confidence, :rs, :price, :meta)
+                                ON CONFLICT (ticker, pattern, as_of) DO UPDATE
+                                SET confidence=EXCLUDED.confidence, price=EXCLUDED.price, meta=EXCLUDED.meta
+                            """),
+                            {
+                                "ticker": ticker,
+                                "pattern": "VCP",
+                                "as_of": datetime.now(),
+                                "confidence": float(signal.confidence_score),
+                                "rs": None,
+                                "price": float(signal.pivot_price) if signal.pivot_price else None,
+                                "meta": f'{{"contractions": {len(signal.contractions)}}}'
+                            }
+                        )
+                    
+                    results.append(f"✓ {ticker}: VCP (conf={signal.confidence_score:.1f}%)")
+                else:
+                    results.append(f"✗ {ticker}: no VCP")
+                    
+            except Exception as e:
+                results.append(f"⚠ {ticker}: {str(e)[:50]}")
+        
+        return {"ok": True, "scanned": len(tickers), "results": results}
+        
+    except Exception as e:
+        logging.error(f"Scan failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+
+
 # Security headers (optional, no-op if lib missing)
 try:
     from secure import Secure  # type: ignore
