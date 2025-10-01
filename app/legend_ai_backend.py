@@ -232,14 +232,13 @@ def run_scan_endpoint(limit: int = Query(default=7, ge=1, le=20)):
         import sys
         from pathlib import Path
         from datetime import datetime
-        import pandas as pd
-        import yfinance as yf
         
         # Add parent to path
         sys.path.insert(0, str(Path(__file__).parent.parent))
         
         from vcp_ultimate_algorithm import VCPDetector  # type: ignore
         from .db import engine  # type: ignore
+        from .data_fetcher import fetch_stock_data  # type: ignore
         from sqlalchemy import text
         
         # Load universe
@@ -250,20 +249,16 @@ def run_scan_endpoint(limit: int = Query(default=7, ge=1, le=20)):
         else:
             tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN"][:limit]
         
-        detector = VCPDetector(min_price=10.0, min_volume=500000, min_contractions=2)
+        detector = VCPDetector(min_price=10.0, min_volume=500000, min_contractions=2, check_trend_template=False)
         
         results = []
         for ticker in tickers:
             try:
-                # Fetch data
-                stock = yf.Ticker(ticker)
-                df = stock.history(period="1y")
-                if df.empty or len(df) < 50:
+                # Fetch data using multi-source fetcher
+                df = fetch_stock_data(ticker, days=365)
+                if df is None or len(df) < 60:
                     results.append(f"⊘ {ticker}: insufficient data")
                     continue
-                
-                df = df.reset_index()
-                # Keep uppercase column names for VCP detector
                 
                 # Detect
                 signal = detector.detect_vcp(df, ticker)
