@@ -300,11 +300,11 @@ class LegendAI {
     }
 
     setDefaultFilters() {
-        // Set default slider values
-        const rsSlider = document.getElementById('rs-rating-min');
+        // Set default slider values (using correct IDs from HTML)
+        const rsSlider = document.getElementById('rs-slider');
         if (rsSlider) rsSlider.value = 80;
         
-        const confidenceSlider = document.getElementById('confidence-threshold');
+        const confidenceSlider = document.getElementById('confidence-slider');
         if (confidenceSlider) confidenceSlider.value = 70;
 
         console.log('✅ Default filters set');
@@ -331,19 +331,20 @@ class LegendAI {
             });
         });
 
-        // Filter inputs with debouncing
-        const filterInputs = ['market-cap', 'sector', 'rs-rating-min', 'confidence-threshold'];
+        // Filter inputs with debouncing (using correct HTML IDs)
+        const filterInputs = ['market-cap-filter', 'sector-filter', 'rs-slider', 'confidence-slider'];
         filterInputs.forEach(id => {
             const element = document.getElementById(id);
             if (element) {
                 element.addEventListener('input', () => {
                     // Update slider display immediately
                     if (element.type === 'range') {
-                        const display = document.querySelector(`label[for="${id}"]`);
-                        if (display && id === 'rs-rating-min') {
-                            display.textContent = `RS Rating Minimum: ${element.value}`;
-                        } else if (display && id === 'confidence-threshold') {
-                            display.textContent = `Confidence Threshold: ${element.value}%`;
+                        if (id === 'rs-slider') {
+                            const display = document.getElementById('rs-value');
+                            if (display) display.textContent = element.value;
+                        } else if (id === 'confidence-slider') {
+                            const display = document.getElementById('confidence-value');
+                            if (display) display.textContent = element.value + '%';
                         }
                     }
                     
@@ -353,6 +354,8 @@ class LegendAI {
                         this.applyFilters();
                     }, 300);
                 });
+            } else {
+                console.warn('⚠️ Filter element not found:', id);
             }
         });
 
@@ -381,10 +384,11 @@ class LegendAI {
     applyFilters() {
         console.log('🔍 Applying filters...');
         
-        const rsMin = parseInt(document.getElementById('rs-rating-min')?.value || 80);
-        const confidenceMin = parseFloat(document.getElementById('confidence-threshold')?.value || 70) / 100;
-        const sector = document.getElementById('sector')?.value || 'all';
-        const marketCap = document.getElementById('market-cap')?.value || 'all';
+        // Use correct HTML IDs
+        const rsMin = parseInt(document.getElementById('rs-slider')?.value || 80);
+        const confidenceMin = parseFloat(document.getElementById('confidence-slider')?.value || 70) / 100;
+        const sector = document.getElementById('sector-filter')?.value || 'all';
+        const marketCap = document.getElementById('market-cap-filter')?.value || 'all';
 
         console.log('Filter values:', { rsMin, confidenceMin, sector, marketCap });
 
