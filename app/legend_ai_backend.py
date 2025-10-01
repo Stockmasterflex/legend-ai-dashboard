@@ -13,6 +13,8 @@ import os
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, APIRouter, Query, Response, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
@@ -163,6 +165,21 @@ def meta_status_v1() -> StatusModel:
 
 app.include_router(v1)
 
+# Mount static files if public directory exists
+public_dir = Path(__file__).parent.parent / "public"
+if public_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(public_dir)), name="static")
+
+
+# Serve the test dashboard
+@app.get("/test-api.html", response_class=HTMLResponse)
+def serve_test_dashboard():
+    """Serve the interactive API test dashboard."""
+    html_path = Path(__file__).parent.parent / "public" / "test-api.html"
+    if html_path.exists():
+        return html_path.read_text()
+    return "<h1>Dashboard not found. Please check deployment.</h1>"
+
 
 # Legacy API endpoint (redirect to v1 for backward compatibility)
 # Returns data in the format the dashboard expects
@@ -234,6 +251,44 @@ def get_portfolio_positions():
     return []
 
 
+# Debug endpoint to show exactly what data the frontend should use
+@app.get("/admin/frontend-data-sample")
+def frontend_data_sample():
+    """Return a sample of exactly what the frontend should fetch and how to display it."""
+    v1_response = patterns_all_v1(Response(), limit=3, cursor=None)
+    
+    return {
+        "instructions": "The frontend should call /v1/patterns/all and transform like this:",
+        "api_url": "https://legend-api.onrender.com/v1/patterns/all",
+        "raw_v1_response": v1_response,
+        "frontend_code": """
+// Correct way to fetch and display patterns:
+fetch('https://legend-api.onrender.com/v1/patterns/all?limit=100')
+  .then(r => r.json())
+  .then(data => {
+    const patterns = data.items.map(item => ({
+      symbol: item.ticker,
+      name: item.ticker + ' Corp',
+      pattern_type: item.pattern,
+      confidence: item.confidence,
+      rs_rating: item.rs || 80,
+      current_price: item.price,
+      pivot_price: item.price,
+      stop_loss: item.price * 0.92,
+      target: item.price * 1.20,
+      entry: item.price,
+      days_in_pattern: 15,
+      sector: 'Technology',
+      action: 'Analyze'
+    }));
+    console.log('Patterns ready:', patterns);
+    // Now populate your table with patterns array
+  });
+        """,
+        "test_it_now": "Open browser console and paste the code above to see it work!"
+    }
+
+
 # Debug endpoint to list all routes
 @app.get("/admin/list-routes")
 def list_all_routes():
@@ -246,7 +301,13 @@ def list_all_routes():
                 "methods": list(route.methods) if route.methods else [],
                 "name": route.name if hasattr(route, "name") else None
             })
-    return {"total_routes": len(routes), "routes": routes}
+    # Filter to show only patterns-related routes
+    patterns_routes = [r for r in routes if 'pattern' in r['path'].lower() or 'api' in r['path'].lower()]
+    return {
+        "total_routes": len(routes),
+        "patterns_related": patterns_routes,
+        "all_routes": routes
+    }
 
 
 # Debug endpoint to test data transformation
