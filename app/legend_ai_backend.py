@@ -168,52 +168,44 @@ app.include_router(v1)
 # Returns data in the format the dashboard expects
 @app.get("/api/patterns/all")
 def get_all_patterns_legacy(response: Response, limit: int = Query(default=500, ge=1, le=1000)):
-    """Legacy endpoint for backward compatibility. Returns dashboard-compatible format."""
-    try:
-        from .db import engine  # type: ignore
-        from .db_queries import fetch_patterns  # type: ignore
+    """Legacy endpoint for backward compatibility. Returns dashboard-compatible format.
+    
+    Calls the v1 endpoint internally and transforms the data to the format the dashboard expects.
+    """
+    # Call the v1 endpoint
+    v1_response = patterns_all_v1(response, limit=min(limit, 500), cursor=None)
+    
+    # v1 returns {"items": [...], "next": ...}, extract items
+    v1_items = v1_response.get("items", []) if isinstance(v1_response, dict) else []
+    
+    # Transform to dashboard format
+    dashboard_format = []
+    for item in v1_items:
+        ticker = item.get("ticker", "UNKNOWN")
+        pattern = item.get("pattern", "VCP")
+        confidence = item.get("confidence", 0)
+        price = item.get("price", 0)
+        rs = item.get("rs", 80)
         
-        items, _ = fetch_patterns(engine, limit=limit, cursor=None)
-        
-        logging.info(f"[legacy API] Fetched {len(items)} items from fetch_patterns")
-        
-        # Transform to dashboard format
-        dashboard_format = []
-        for idx, item in enumerate(items):
-            try:
-                # Items from fetch_patterns are dicts
-                ticker = item.get("ticker", "UNKNOWN")
-                pattern = item.get("pattern", "VCP")
-                confidence = item.get("confidence", 0)
-                price = item.get("price", 0)
-                rs = item.get("rs", 80)
-                
-                # Convert database format to dashboard expected format
-                dashboard_item = {
-                    "symbol": ticker,
-                    "name": f"{ticker} Corp",  # TODO: fetch real company names
-                    "sector": "Technology",  # TODO: fetch real sector data
-                    "pattern_type": pattern,
-                    "confidence": confidence / 100 if confidence and confidence > 1 else (confidence or 0),
-                    "pivot_price": price or 0,
-                    "stop_loss": (price or 0) * 0.92,  # 8% below current
-                    "current_price": price or 0,
-                    "days_in_pattern": 15,  # TODO: calculate from as_of
-                    "rs_rating": int(rs or 80),
-                    "entry": price or 0,
-                    "target": (price or 0) * 1.20,  # 20% target
-                    "action": "Analyze"
-                }
-                dashboard_format.append(dashboard_item)
-            except Exception as item_error:
-                logging.error(f"[legacy API] Error transforming item {idx}: {item_error}, item={item}")
-                continue
-        
-        logging.info(f"[legacy API] Returning {len(dashboard_format)} transformed items")
-        return dashboard_format
-    except Exception as e:
-        logging.error(f"Legacy patterns endpoint error: {e}", exc_info=True)
-        return []
+        # Convert to dashboard expected format
+        dashboard_item = {
+            "symbol": ticker,
+            "name": f"{ticker} Corp",  # TODO: fetch real company names
+            "sector": "Technology",  # TODO: fetch real sector data
+            "pattern_type": pattern,
+            "confidence": confidence / 100 if confidence and confidence > 1 else (confidence or 0),
+            "pivot_price": price or 0,
+            "stop_loss": (price or 0) * 0.92,  # 8% below current
+            "current_price": price or 0,
+            "days_in_pattern": 15,  # TODO: calculate from as_of
+            "rs_rating": int(rs or 80),
+            "entry": price or 0,
+            "target": (price or 0) * 1.20,  # 20% target
+            "action": "Analyze"
+        }
+        dashboard_format.append(dashboard_item)
+    
+    return dashboard_format
 
 
 # Market environment endpoint (used by dashboard)
