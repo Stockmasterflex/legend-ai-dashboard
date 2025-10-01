@@ -337,6 +337,16 @@ class LegendAI {
             const element = document.getElementById(id);
             if (element) {
                 element.addEventListener('input', () => {
+                    // Update slider display immediately
+                    if (element.type === 'range') {
+                        const display = document.querySelector(`label[for="${id}"]`);
+                        if (display && id === 'rs-rating-min') {
+                            display.textContent = `RS Rating Minimum: ${element.value}`;
+                        } else if (display && id === 'confidence-threshold') {
+                            display.textContent = `Confidence Threshold: ${element.value}%`;
+                        }
+                    }
+                    
                     clearTimeout(this.filterDebounce);
                     this.filterDebounce = setTimeout(() => {
                         console.log('🔍 Filter changed:', id, element.value);
@@ -406,7 +416,7 @@ class LegendAI {
     }
 
     populatePatternTable() {
-        const tbody = document.querySelector('#pattern-results tbody');
+        const tbody = document.getElementById('scanner-tbody');
         if (!tbody) {
             console.warn('⚠️ Pattern table body not found');
             return;
@@ -438,7 +448,7 @@ class LegendAI {
     }
 
     updatePatternCount() {
-        const countElement = document.querySelector('.pattern-count');
+        const countElement = document.getElementById('results-count');
         if (countElement) {
             countElement.textContent = `${this.filteredPatterns.length} patterns found`;
         }
