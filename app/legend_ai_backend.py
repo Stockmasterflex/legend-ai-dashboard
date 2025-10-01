@@ -197,6 +197,34 @@ def init_database_endpoint():
         raise HTTPException(status_code=500, detail=f"Init failed: {str(e)}")
 
 
+@app.get("/admin/test-data")
+def test_data_fetch(ticker: str = Query(default="AAPL")):
+    """Test endpoint to check what data we're getting from yfinance."""
+    try:
+        import yfinance as yf
+        import pandas as pd
+        
+        stock = yf.Ticker(ticker)
+        df = stock.history(period="1y")
+        
+        if df.empty:
+            return {"error": "No data returned from yfinance"}
+        
+        df = df.reset_index()
+        
+        return {
+            "ticker": ticker,
+            "rows": len(df),
+            "columns": list(df.columns),
+            "first_row": df.iloc[0].to_dict() if len(df) > 0 else None,
+            "last_row": df.iloc[-1].to_dict() if len(df) > 0 else None,
+            "sample_close": float(df['Close'].iloc[-1]) if 'Close' in df.columns else None,
+            "sample_volume": float(df['Volume'].iloc[-1]) if 'Volume' in df.columns else None,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.post("/admin/run-scan")
 def run_scan_endpoint(limit: int = Query(default=7, ge=1, le=20)):
     """Trigger a scan for VCP patterns on a limited set of tickers."""
