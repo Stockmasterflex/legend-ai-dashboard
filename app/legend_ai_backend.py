@@ -175,34 +175,41 @@ def get_all_patterns_legacy(response: Response, limit: int = Query(default=500, 
         
         items, _ = fetch_patterns(engine, limit=limit, cursor=None)
         
+        logging.info(f"[legacy API] Fetched {len(items)} items from fetch_patterns")
+        
         # Transform to dashboard format
         dashboard_format = []
-        for item in items:
-            # Handle both dict and RowMapping types
-            ticker = item["ticker"] if isinstance(item, dict) else item.ticker
-            pattern = item["pattern"] if isinstance(item, dict) else item.pattern
-            confidence = item["confidence"] if isinstance(item, dict) else item.confidence
-            price = item["price"] if isinstance(item, dict) else item.price
-            rs = item["rs"] if isinstance(item, dict) else item.rs
-            
-            # Convert database format to dashboard expected format
-            dashboard_item = {
-                "symbol": ticker,
-                "name": ticker + " Corp",  # TODO: fetch real company names
-                "sector": "Technology",  # TODO: fetch real sector data
-                "pattern_type": pattern,
-                "confidence": confidence / 100 if confidence and confidence > 1 else (confidence or 0),
-                "pivot_price": price,
-                "stop_loss": price * 0.92,  # 8% below current
-                "current_price": price,
-                "days_in_pattern": 15,  # TODO: calculate from as_of
-                "rs_rating": int(rs or 80),
-                "entry": price,
-                "target": price * 1.20,  # 20% target
-                "action": "Analyze"
-            }
-            dashboard_format.append(dashboard_item)
+        for idx, item in enumerate(items):
+            try:
+                # Items from fetch_patterns are dicts
+                ticker = item.get("ticker", "UNKNOWN")
+                pattern = item.get("pattern", "VCP")
+                confidence = item.get("confidence", 0)
+                price = item.get("price", 0)
+                rs = item.get("rs", 80)
+                
+                # Convert database format to dashboard expected format
+                dashboard_item = {
+                    "symbol": ticker,
+                    "name": f"{ticker} Corp",  # TODO: fetch real company names
+                    "sector": "Technology",  # TODO: fetch real sector data
+                    "pattern_type": pattern,
+                    "confidence": confidence / 100 if confidence and confidence > 1 else (confidence or 0),
+                    "pivot_price": price or 0,
+                    "stop_loss": (price or 0) * 0.92,  # 8% below current
+                    "current_price": price or 0,
+                    "days_in_pattern": 15,  # TODO: calculate from as_of
+                    "rs_rating": int(rs or 80),
+                    "entry": price or 0,
+                    "target": (price or 0) * 1.20,  # 20% target
+                    "action": "Analyze"
+                }
+                dashboard_format.append(dashboard_item)
+            except Exception as item_error:
+                logging.error(f"[legacy API] Error transforming item {idx}: {item_error}, item={item}")
+                continue
         
+        logging.info(f"[legacy API] Returning {len(dashboard_format)} transformed items")
         return dashboard_format
     except Exception as e:
         logging.error(f"Legacy patterns endpoint error: {e}", exc_info=True)
