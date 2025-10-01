@@ -1135,3 +1135,4 @@ class LegendAI {
 // Initialize the application
 const app = new LegendAI();
 window.app = app;
+/* Updated: 2025-09-30 21:59:07 - Force Vercel rebuild */
