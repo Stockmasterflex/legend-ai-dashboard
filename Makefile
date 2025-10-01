@@ -17,4 +17,10 @@ dev:
 migrate-sqlite:
 	SQLITE_PATH=legendai.db DATABASE_URL="$${DATABASE_URL}" $(PY) scripts/migrate_sqlite_to_timescale.py
 
+render-report:
+	$(PY) scripts/render_doctor.py
+
+render-redeploy:
+	$(PY) scripts/render_doctor.py --redeploy
+
 

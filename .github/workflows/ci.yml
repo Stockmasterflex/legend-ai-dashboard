@@ -15,5 +15,6 @@ jobs:
       - run: pytest -q || true
       - run: python scripts/doctor_dockerfile.py
       - run: python scripts/doctor_render_blueprint.py
+      - run: python scripts/render_doctor.py || true
 
 

@@ -1,3 +1,5 @@
+import { api } from './public/api.js';
+
 // Legend AI Trading Dashboard JavaScript
 
 class LegendAI {
@@ -7,12 +9,13 @@ class LegendAI {
         this.currentPattern = 'vcp';
         this.stockChart = null;
         this.currentSort = { column: null, direction: 'asc' };
-        const runtimeApiBase = (typeof window !== 'undefined' && window.LEGEND_API_URL)
-            || (typeof process !== 'undefined' && process.env && process.env.LEGEND_API_URL)
-            || 'http://127.0.0.1:8001';
-        this.apiBaseUrl = runtimeApiBase.replace(/\/$/, '');
         this.marketEnvironment = null;
-        
+        this.patternPagination = { nextCursor: null, hasMore: false, source: 'v1' };
+        this.patternSet = new Set();
+        this.rawPatterns = [];
+        this.rawPortfolio = [];
+        this.isLoadingMore = false;
+
         this.init();
     }
 
@@ -20,12 +23,25 @@ class LegendAI {
         try {
             const { patterns, marketEnvironment, portfolio } = await this.loadBackendData();
             this.marketEnvironment = marketEnvironment || this.getFallbackMarketEnvironment();
-            this.data = await this.buildDataModel(patterns, portfolio);
+            const initialPatterns = Array.isArray(patterns) ? patterns : [];
+            const initialPortfolio = Array.isArray(portfolio) ? portfolio : [];
+            if (!this.rawPatterns.length) {
+                this.rawPatterns = [...initialPatterns];
+                this.patternSet = new Set(initialPatterns.map(pattern => pattern.symbol));
+            }
+            if (!this.rawPortfolio.length) {
+                this.rawPortfolio = [...initialPortfolio];
+            }
+            this.data = await this.buildDataModel(initialPatterns, initialPortfolio);
         } catch (error) {
             console.error('Failed to load backend data, using fallback dataset.', error);
             const fallbackData = this.getFallbackData();
             this.marketEnvironment = fallbackData.market_environment;
             this.data = fallbackData;
+            this.rawPatterns = Array.isArray(fallbackData.patterns) ? [...fallbackData.patterns] : [];
+            this.patternSet = new Set(this.rawPatterns.map(pattern => pattern.symbol));
+            this.rawPortfolio = Array.isArray(fallbackData.portfolio) ? [...fallbackData.portfolio] : [];
+            this.patternPagination = { nextCursor: null, hasMore: false, source: 'fallback' };
         }
         
         this.setupEventListeners();
@@ -35,18 +51,29 @@ class LegendAI {
     }
 
     async loadBackendData() {
-        const patterns = await this.fetchJSON(`${this.apiBaseUrl}/api/patterns/all`);
+        const initialPage = await this.fetchPatternsPage({ limit: 100 });
+        const patterns = Array.isArray(initialPage.items) ? initialPage.items : [];
+
+        this.patternPagination = {
+            nextCursor: initialPage.nextCursor || null,
+            hasMore: Boolean(initialPage.hasMore),
+            source: initialPage.source || 'v1'
+        };
+        this.patternSet = new Set(patterns.map(pattern => pattern.symbol));
+        this.rawPatterns = [...patterns];
 
         const [marketEnvironment, portfolio] = await Promise.all([
-            this.fetchJSON(`${this.apiBaseUrl}/api/market/environment`).catch(error => {
+            this.fetchJSON('/api/market/environment').catch(error => {
                 console.warn('Market environment unavailable, continuing without it.', error);
                 return null;
             }),
-            this.fetchJSON(`${this.apiBaseUrl}/api/portfolio/positions`).catch(error => {
+            this.fetchJSON('/api/portfolio/positions').catch(error => {
                 console.warn('Portfolio positions unavailable, using empty dataset.', error);
                 return [];
             })
         ]);
+
+        this.rawPortfolio = Array.isArray(portfolio) ? [...portfolio] : [];
 
         return { patterns, marketEnvironment, portfolio };
     }
@@ -79,12 +106,136 @@ class LegendAI {
         }
     }
 
-    async fetchJSON(url, options = {}) {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            throw new Error(`Request failed for ${url}: ${response.status} ${response.statusText}`);
+    async fetchJSON(route, options = {}) {
+        const { data } = await api(route, options);
+        return data;
+    }
+
+    async fetchPatternsPage({ cursor = null, limit = 100 } = {}) {
+        const params = new URLSearchParams();
+        if (limit) {
+            params.set('limit', String(limit));
         }
-        return await response.json();
+        if (cursor) {
+            params.set('cursor', cursor);
+        }
+
+        const query = params.toString();
+        const path = query ? `/v1/patterns/all?${query}` : '/v1/patterns/all';
+
+        try {
+            const { data } = await api(path);
+
+            if (data && Array.isArray(data.items)) {
+                const nextCursor = data.next_cursor ?? data.nextCursor ?? data.next ?? null;
+                const hasMore =
+                    typeof data.has_more === 'boolean'
+                        ? data.has_more
+                        : typeof data.hasMore === 'boolean'
+                            ? data.hasMore
+                            : Boolean(nextCursor);
+
+                return {
+                    items: data.items,
+                    nextCursor,
+                    hasMore,
+                    source: 'v1'
+                };
+            }
+
+            if (Array.isArray(data)) {
+                return {
+                    items: data,
+                    nextCursor: null,
+                    hasMore: false,
+                    source: 'legacy'
+                };
+            }
+        } catch (error) {
+            console.warn('v1 patterns endpoint unavailable, falling back to legacy.', error);
+        }
+
+        try {
+            const { data: legacy } = await api('/api/patterns/all');
+            return {
+                items: Array.isArray(legacy) ? legacy : [],
+                nextCursor: null,
+                hasMore: false,
+                source: 'legacy'
+            };
+        } catch (fallbackError) {
+            console.error('Failed to fetch patterns from legacy endpoint.', fallbackError);
+            throw fallbackError;
+        }
+    }
+
+    async rebuildDataModel() {
+        const portfolioSource = Array.isArray(this.data?.portfolio) ? this.data.portfolio : this.rawPortfolio;
+        this.rawPortfolio = Array.isArray(portfolioSource) ? [...portfolioSource] : [];
+        this.data = await this.buildDataModel(this.rawPatterns, this.rawPortfolio);
+        this.applyFilters();
+        this.populateSectorGrid();
+        this.populatePortfolioTable();
+        this.populateWatchlist();
+    }
+
+    async loadMorePatterns() {
+        if (this.isLoadingMore || !this.patternPagination?.hasMore || this.patternPagination.source !== 'v1') {
+            return;
+        }
+
+        this.isLoadingMore = true;
+        const loadMoreButton = document.getElementById('load-more-patterns');
+        if (loadMoreButton) {
+            loadMoreButton.disabled = true;
+            loadMoreButton.textContent = 'Loading...';
+        }
+
+        try {
+            const nextPage = await this.fetchPatternsPage({ cursor: this.patternPagination.nextCursor });
+            const newItems = Array.isArray(nextPage.items) ? nextPage.items.filter(item => !this.patternSet.has(item.symbol)) : [];
+
+            newItems.forEach(item => this.patternSet.add(item.symbol));
+
+            if (newItems.length) {
+                this.rawPatterns = [...this.rawPatterns, ...newItems];
+            }
+
+            this.patternPagination = {
+                nextCursor: nextPage.nextCursor || null,
+                hasMore: Boolean(nextPage.hasMore),
+                source: nextPage.source || this.patternPagination.source
+            };
+
+            if (newItems.length) {
+                await this.rebuildDataModel();
+            }
+        } catch (error) {
+            console.error('Failed to load additional patterns.', error);
+        } finally {
+            if (loadMoreButton) {
+                loadMoreButton.disabled = false;
+                loadMoreButton.textContent = 'Load more';
+            }
+            this.isLoadingMore = false;
+            this.updateLoadMoreVisibility();
+        }
+    }
+
+    updateLoadMoreVisibility() {
+        const button = document.getElementById('load-more-patterns');
+        if (!button) return;
+
+        const shouldShow = Boolean(this.patternPagination?.hasMore) && this.patternPagination.source === 'v1';
+        if (shouldShow) {
+            button.classList.remove('hidden');
+            if (!this.isLoadingMore) {
+                button.disabled = false;
+                button.textContent = 'Load more';
+            }
+        } else {
+            button.classList.add('hidden');
+        }
     }
 
     async buildDataModel(patterns, portfolio) {
@@ -188,7 +339,7 @@ class LegendAI {
             let trendTemplateScore = 'N/A';
 
             try {
-                const analysis = await this.fetchJSON(`${this.apiBaseUrl}/api/stocks/${pattern.symbol}/analysis`);
+                const analysis = await this.fetchJSON(`/api/stocks/${pattern.symbol}/analysis`);
                 if (analysis && typeof analysis.trend_template_score !== 'undefined') {
                     trendTemplateScore = analysis.trend_template_score;
                 }
@@ -307,6 +458,13 @@ class LegendAI {
             });
         }
 
+        const loadMoreButton = document.getElementById('load-more-patterns');
+        if (loadMoreButton) {
+            loadMoreButton.addEventListener('click', () => {
+                this.loadMorePatterns();
+            });
+        }
+
         // Table sorting
         document.querySelectorAll('[data-sort]').forEach(th => {
             th.addEventListener('click', (e) => {
@@ -359,6 +517,7 @@ class LegendAI {
         this.populateSectorGrid();
         this.populatePortfolioTable();
         this.populateWatchlist();
+        this.updateLoadMoreVisibility();
     }
 
     getVcpPatterns() {
@@ -497,6 +656,8 @@ class LegendAI {
         if (resultsCount) {
             resultsCount.textContent = `${this.filteredPatterns.length} patterns found`;
         }
+
+        this.updateLoadMoreVisibility();
     }
 
     populatePortfolioTable() {
@@ -973,3 +1134,4 @@ class LegendAI {
 
 // Initialize the application
 const app = new LegendAI();
+window.app = app;
