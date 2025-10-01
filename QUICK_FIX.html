@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Legend AI - Quick Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #00ff88; }
+        .test-btn {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            border-radius: 5px;
+        }
+        .test-btn:hover { background: #00cc66; }
+        #results {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            background: #00ff88;
+            color: #000;
+        }
+        .success { color: #00ff88; }
+        .error { color: #ff4444; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Legend AI - Quick Connectivity Test</h1>
+    <p>This tests if your API is working correctly. Click the buttons below:</p>
+    
+    <button class="test-btn" onclick="testHealth()">1. Test Health</button>
+    <button class="test-btn" onclick="testV1API()">2. Test v1 API</button>
+    <button class="test-btn" onclick="testLegacyAPI()">3. Test Legacy API</button>
+    <button class="test-btn" onclick="populateTable()">4. Populate Table</button>
+    
+    <div id="results"></div>
+    <div id="table-container"></div>
+    
+    <script>
+        const API_BASE = 'https://legend-api.onrender.com';
+        const log = (msg, type = 'info') => {
+            const results = document.getElementById('results');
+            const color = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
+            results.innerHTML += `<span class="${color}">${msg}</span>\n`;
+        };
+        
+        async function testHealth() {
+            document.getElementById('results').innerHTML = '';
+            log('Testing /healthz...');
+            try {
+                const res = await fetch(`${API_BASE}/healthz`);
+                const data = await res.json();
+                log(`✓ Health check passed: ${JSON.stringify(data)}`, 'success');
+            } catch (e) {
+                log(`✗ Health check failed: ${e}`, 'error');
+            }
+        }
+        
+        async function testV1API() {
+            log('\nTesting /v1/patterns/all...');
+            try {
+                const res = await fetch(`${API_BASE}/v1/patterns/all?limit=5`);
+                const data = await res.json();
+                log(`✓ v1 API works! Found ${data.items.length} patterns`, 'success');
+                log(JSON.stringify(data, null, 2));
+            } catch (e) {
+                log(`✗ v1 API failed: ${e}`, 'error');
+            }
+        }
+        
+        async function testLegacyAPI() {
+            log('\nTesting /api/patterns/all...');
+            try {
+                const res = await fetch(`${API_BASE}/api/patterns/all?limit=5`);
+                const data = await res.json();
+                log(`✓ Legacy API returned ${Array.isArray(data) ? data.length : 0} items`, data.length > 0 ? 'success' : 'error');
+                if (data.length > 0) {
+                    log(JSON.stringify(data[0], null, 2));
+                } else {
+                    log('WARNING: Legacy API returns empty array. Use v1 API instead!', 'error');
+                }
+            } catch (e) {
+                log(`✗ Legacy API failed: ${e}`, 'error');
+            }
+        }
+        
+        async function populateTable() {
+            log('\nFetching patterns for table...');
+            try {
+                const res = await fetch(`${API_BASE}/v1/patterns/all?limit=100`);
+                const data = await res.json();
+                
+                if (!data.items || data.items.length === 0) {
+                    log('No patterns found!', 'error');
+                    return;
+                }
+                
+                log(`✓ Found ${data.items.length} patterns. Populating table...`, 'success');
+                
+                const table = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Pattern</th>
+                                <th>Confidence</th>
+                                <th>RS Rating</th>
+                                <th>Price</th>
+                                <th>Entry</th>
+                                <th>Stop</th>
+                                <th>Target</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.items.map(item => `
+                                <tr>
+                                    <td><strong>${item.ticker}</strong></td>
+                                    <td>${item.pattern}</td>
+                                    <td>${(item.confidence || 0).toFixed(1)}%</td>
+                                    <td>${item.rs || 'N/A'}</td>
+                                    <td>$${(item.price || 0).toFixed(2)}</td>
+                                    <td>$${(item.price || 0).toFixed(2)}</td>
+                                    <td>$${((item.price || 0) * 0.92).toFixed(2)}</td>
+                                    <td>$${((item.price || 0) * 1.20).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('table-container').innerHTML = table;
+                log(`✓ Table populated with ${data.items.length} patterns!`, 'success');
+                
+            } catch (e) {
+                log(`✗ Failed to populate table: ${e}`, 'error');
+            }
+        }
+        
+        // Auto-run on load
+        window.onload = () => {
+            log('Legend AI Connectivity Tester loaded. Click buttons above to test.');
+        };
+    </script>
+</body>
+</html>
+
