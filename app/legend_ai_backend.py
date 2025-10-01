@@ -22,6 +22,7 @@ from .cache import cache_get, cache_set
 from .db_queries import fetch_patterns, get_status
 
 from .observability import setup_json_logging, setup_sentry
+from pathlib import Path
 
 
 # Import the existing FastAPI application defined at repository root
@@ -161,6 +162,39 @@ def meta_status_v1() -> StatusModel:
 
 
 app.include_router(v1)
+
+
+# Database initialization endpoint (one-time use, no auth for now)
+@app.post("/admin/init-db")
+def init_database_endpoint():
+    """Initialize database schema by running SQL migrations. Use once after deploy."""
+    try:
+        from .db import engine  # type: ignore
+        from sqlalchemy import text
+        
+        migrations_dir = Path(__file__).parent.parent / "migrations" / "sql"
+        sql_files = sorted(migrations_dir.glob("*.sql"))
+        
+        results = []
+        for sql_file in sql_files:
+            with open(sql_file, "r") as f:
+                sql = f.read()
+            
+            # Split and execute
+            statements = [s.strip() for s in sql.split(";") if s.strip()]
+            with engine.begin() as conn:
+                for stmt in statements:
+                    if stmt:
+                        try:
+                            conn.execute(text(stmt))
+                            results.append(f"✓ {sql_file.name}")
+                        except Exception as e:
+                            results.append(f"⚠ {sql_file.name}: {str(e)[:100]}")
+        
+        return {"ok": True, "results": results}
+    except Exception as e:
+        logging.error(f"Database init failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Init failed: {str(e)}")
 
 
 # Security headers (optional, no-op if lib missing)
