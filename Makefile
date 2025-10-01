@@ -23,4 +23,7 @@ render-report:
 render-redeploy:
 	$(PY) scripts/render_doctor.py --redeploy
 
+test-integration:
+	$(PY) scripts/test_integration.py
+
 

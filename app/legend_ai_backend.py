@@ -164,6 +164,21 @@ def meta_status_v1() -> StatusModel:
 app.include_router(v1)
 
 
+# Legacy API endpoint (redirect to v1 for backward compatibility)
+@app.get("/api/patterns/all")
+def get_all_patterns_legacy(response: Response, limit: int = Query(default=500, ge=1, le=1000)):
+    """Legacy endpoint for backward compatibility. Redirects to v1."""
+    try:
+        from .db import engine  # type: ignore
+        from .db_queries import fetch_patterns  # type: ignore
+        
+        items, _ = fetch_patterns(engine, limit=limit, cursor=None)
+        return items
+    except Exception as e:
+        logging.error(f"Legacy patterns endpoint error: {e}", exc_info=True)
+        return []
+
+
 # Database initialization endpoint (one-time use, no auth for now)
 @app.post("/admin/init-db")
 def init_database_endpoint():
