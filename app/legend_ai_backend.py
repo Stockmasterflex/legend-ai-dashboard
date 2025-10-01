@@ -242,6 +242,42 @@ def get_portfolio_positions():
     return []
 
 
+# Debug endpoint to test data transformation
+@app.get("/admin/test-legacy-transform")
+def test_legacy_transform():
+    """Debug endpoint to test the legacy data transformation."""
+    try:
+        from .db import engine  # type: ignore
+        from .db_queries import fetch_patterns  # type: ignore
+        
+        items, _ = fetch_patterns(engine, limit=3, cursor=None)
+        
+        result = {
+            "raw_count": len(items),
+            "raw_sample": items[0] if items else None,
+            "transformed": []
+        }
+        
+        for item in items:
+            ticker = item.get("ticker", "UNKNOWN")
+            pattern = item.get("pattern", "VCP")
+            confidence = item.get("confidence", 0)
+            price = item.get("price", 0)
+            rs = item.get("rs", 80)
+            
+            result["transformed"].append({
+                "symbol": ticker,
+                "pattern_type": pattern,
+                "confidence": confidence,
+                "price": price,
+                "rs_rating": int(rs or 80)
+            })
+        
+        return result
+    except Exception as e:
+        return {"error": str(e), "traceback": str(e.__traceback__)}
+
+
 # Database initialization endpoint (one-time use, no auth for now)
 @app.post("/admin/init-db")
 def init_database_endpoint():
