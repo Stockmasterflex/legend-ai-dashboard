@@ -245,7 +245,8 @@ def get_portfolio_positions():
 # Debug endpoint to test data transformation
 @app.get("/admin/test-legacy-transform")
 def test_legacy_transform():
-    """Debug endpoint to test the legacy data transformation."""
+    """Debug endpoint to test the legacy data transformation and diagnose issues."""
+    import traceback as tb
     try:
         from .db import engine  # type: ignore
         from .db_queries import fetch_patterns  # type: ignore
@@ -255,7 +256,9 @@ def test_legacy_transform():
         result = {
             "raw_count": len(items),
             "raw_sample": items[0] if items else None,
-            "transformed": []
+            "transformed": [],
+            "legacy_call_result": None,
+            "legacy_call_error": None
         }
         
         for item in items:
@@ -273,9 +276,22 @@ def test_legacy_transform():
                 "rs_rating": int(rs or 80)
             })
         
+        # Now actually CALL the legacy endpoint to see what happens
+        try:
+            from fastapi.responses import Response
+            from fastapi import Query
+            legacy_response = get_all_patterns_legacy(Response(), limit=3)
+            result["legacy_call_result"] = legacy_response
+        except Exception as legacy_err:
+            result["legacy_call_error"] = {
+                "error": str(legacy_err),
+                "type": type(legacy_err).__name__,
+                "traceback": tb.format_exc()
+            }
+        
         return result
     except Exception as e:
-        return {"error": str(e), "traceback": str(e.__traceback__)}
+        return {"error": str(e), "type": type(e).__name__, "traceback": tb.format_exc()}
 
 
 # Database initialization endpoint (one-time use, no auth for now)
