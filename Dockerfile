@@ -23,10 +23,8 @@ COPY . .
 # Create data directory for SQLite persistence
 RUN mkdir -p $APP_HOME/data
 
-ENV DATABASE_URL="sqlite:////app/data/legendai.db" \
-    REDIS_URL=""
+ENV REDIS_URL=""
 
-# Optional EXPOSE; Render routes to $PORT. Remove 8000 to avoid confusion.
 EXPOSE 10000
 
 # Use shell form so $PORT expands on Render
