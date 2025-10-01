@@ -197,6 +197,63 @@ def init_database_endpoint():
         raise HTTPException(status_code=500, detail=f"Init failed: {str(e)}")
 
 
+@app.post("/admin/seed-demo")
+def seed_demo_data():
+    """Seed the database with mock VCP patterns for testing."""
+    try:
+        from .db import engine  # type: ignore
+        from sqlalchemy import text
+        from datetime import datetime, timedelta
+        
+        # Create 3 mock VCP detections
+        mock_patterns = [
+            {
+                "ticker": "NVDA",
+                "pattern": "VCP",
+                "as_of": datetime.now() - timedelta(days=2),
+                "confidence": 85.5,
+                "rs": 92.3,
+                "price": 495.22,
+                "meta": '{"contractions": 3, "base_depth": 0.18, "pivot": 495.22}'
+            },
+            {
+                "ticker": "PLTR",
+                "pattern": "VCP",
+                "as_of": datetime.now() - timedelta(days=1),
+                "confidence": 78.2,
+                "rs": 88.5,
+                "price": 28.45,
+                "meta": '{"contractions": 4, "base_depth": 0.25, "pivot": 28.45}'
+            },
+            {
+                "ticker": "CRWD",
+                "pattern": "VCP",
+                "as_of": datetime.now(),
+                "confidence": 91.0,
+                "rs": 95.1,
+                "price": 285.67,
+                "meta": '{"contractions": 3, "base_depth": 0.15, "pivot": 285.67}'
+            }
+        ]
+        
+        with engine.begin() as conn:
+            for pattern in mock_patterns:
+                conn.execute(
+                    text("""
+                        INSERT INTO patterns (ticker, pattern, as_of, confidence, rs, price, meta)
+                        VALUES (:ticker, :pattern, :as_of, :confidence, :rs, :price, :meta::jsonb)
+                        ON CONFLICT (ticker, pattern, as_of) DO UPDATE
+                        SET confidence=EXCLUDED.confidence, rs=EXCLUDED.rs, price=EXCLUDED.price, meta=EXCLUDED.meta
+                    """),
+                    pattern
+                )
+        
+        return {"ok": True, "seeded": len(mock_patterns), "patterns": [p["ticker"] for p in mock_patterns]}
+    except Exception as e:
+        logging.error(f"Seed failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Seed failed: {str(e)}")
+
+
 @app.get("/admin/test-data")
 def test_data_fetch(ticker: str = Query(default="AAPL")):
     """Test endpoint to check what data we're getting from yfinance."""
